@@ -39,7 +39,7 @@ This script **must be used together** with the [nexus-no-wait-pp](https://github
 
 3. **Python Packages**
    ```bash
-   pip install pyautogui pytesseract pillow opencv-python 
+   pip install pyautogui pytesseract pillow opencv-python
    ```
 
 4. **Browser Extension**
@@ -115,10 +115,11 @@ The script uses OCR to detect when the mod name changes. For best results:
    - Your browser will open (nexus-no-wait-pp handles the "Slow Download" button)
    - The script waits for the download to complete and mod name to change
    - Process repeats for all mods
+   - If button not found, script will keep scanning indefinitely
 
-4. **When complete:**
-   - Script will notify you when no more buttons are found
-   - You can choose to retry or quit
+4. **To stop:**
+   - Press `Ctrl+C` at any time to stop the script gracefully
+   - The script will show you total downloads completed
 
 ## ⚙️ Configuration
 
@@ -130,12 +131,17 @@ MAX_RETRIES_NO_BUTTON = 5       # Quick retry attempts before auto-retry
 RETRY_INTERVAL = 3              # Seconds between quick retries
 POLL_INTERVAL = 2               # How often to check for button
 BROWSER_DELAY = 5               # Wait time for browser to process
-MOD_NAME_TIMEOUT = 60           # Max wait for mod name change
-AUTO_RETRY_TIMEOUT = 30         # Seconds to auto-scan before asking user (for when Vortex is downloading multiple mods)
+AUTO_RETRY_TIMEOUT = 30         # Seconds to auto-scan before infinite scanning
+MOD_NAME_CHANGE_WAIT = 5        # Seconds to wait for mod name change before proceeding anyway
 ```
 
-**Important Note on `AUTO_RETRY_TIMEOUT`:**
-When Vortex downloads multiple mods simultaneously, the "Download manually" button won't appear until those downloads finish. This setting makes the script automatically keep scanning for the button for the specified duration before prompting you to quit or retry. Set it higher (e.g., 60-120 seconds) if you're downloading large collections.
+**Important Notes:**
+
+- **`AUTO_RETRY_TIMEOUT`**: When Vortex downloads multiple mods simultaneously, the "Download manually" button won't appear until those downloads finish. This setting makes the script automatically scan for the button for the specified duration before switching to infinite scanning mode.
+
+- **`MOD_NAME_CHANGE_WAIT`**: The script tries to detect when the mod name changes using OCR. However, some mods have optional/misc files that keep the same name. If the name doesn't change after this many seconds (default 5), the script proceeds anyway to handle those cases.
+
+- **Infinite Scanning**: After the auto-retry timeout, the script will scan indefinitely until the button appears. You can stop anytime with `Ctrl+C`.
 
 ## 🐛 Troubleshooting
 
@@ -176,9 +182,9 @@ When Vortex downloads multiple mods simultaneously, the "Download manually" butt
 2. **Click Automation**: Clicks the button and returns mouse to original position
 3. **Browser Handling**: Waits for nexus-no-wait-pp to handle the browser download
 4. **OCR Detection**: Uses Tesseract to read mod name and detect when it changes
-5. **Smart Waiting**: Only clicks next button when a new mod appears
-6. **Auto-Retry**: If button not found, automatically scans for 30 seconds (configurable) before prompting
-7. **Error Handling**: After auto-retry timeout, prompts user to quit or retry manually
+5. **Smart Waiting**: Tries to detect mod name change for 5 seconds, then proceeds anyway (handles optional/misc files with same name)
+6. **Auto-Retry**: If button not found, scans for 30 seconds (configurable)
+7. **Infinite Scanning**: After auto-retry timeout, keeps scanning indefinitely (stop with Ctrl+C)
 
 ## ⚠️ Disclaimer
 
@@ -191,7 +197,7 @@ This tool is for educational purposes and to improve user experience for free Ne
 
 ## 📄 License
 
-No License - feel free to use and modify as needed.
+MIT License - feel free to use and modify as needed.
 
 ## 🙏 Credits
 
