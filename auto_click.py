@@ -30,8 +30,8 @@ MAX_RETRIES_NO_BUTTON = 5  # How many times to retry if button not found
 RETRY_INTERVAL = 3  # Seconds between retries
 POLL_INTERVAL = 2  # Seconds between checking if button reappeared
 BROWSER_DELAY = 5  # Seconds to wait for browser JS to work
-MOD_NAME_TIMEOUT = 60  # Max seconds to wait for mod name to change
-AUTO_RETRY_TIMEOUT = 30  # Seconds to auto-retry before prompting user (when Vortex is downloading multiple mods)
+AUTO_RETRY_TIMEOUT = 30  # Seconds to auto-retry before infinite scanning (when Vortex is downloading multiple mods)
+MOD_NAME_CHANGE_WAIT = 5  # Seconds to wait for mod name to change before proceeding anyway (for optional/misc files)
 
 # You'll need to adjust these coordinates based on your screen
 # This is the region where the mod name appears (x, y, width, height)
@@ -70,8 +70,11 @@ def find_download_button(max_attempts=1):
             location = pyautogui.locateOnScreen(DOWNLOAD_BUTTON_IMAGE, confidence=CONFIDENCE_THRESHOLD)
             if location is not None:
                 return location
-        except pyautogui.ImageNotFoundException:
-            pass
+        except (pyautogui.ImageNotFoundException, OSError) as e:
+            # Handle both "image not found" and "screen grab failed" errors
+            if isinstance(e, OSError):
+                print(f"\n⚠ Screen grab error (attempt {attempt + 1}): {e}")
+                time.sleep(1)  # Wait a bit before retrying
         
         if attempt < max_attempts - 1:
             time.sleep(RETRY_INTERVAL)
@@ -117,12 +120,14 @@ def wait_for_button_reappear(timeout=30):
     return False
 
 
-def wait_for_mod_name_change(previous_name, timeout=MOD_NAME_TIMEOUT):
+def wait_for_mod_name_change(previous_name, timeout=MOD_NAME_CHANGE_WAIT):
     """
     Waits until the mod name changes from the previous one.
-    Returns the new mod name if changed, None if timeout.
+    Returns the new mod name if changed, or previous name if timeout.
+    Timeout is short (5s) to handle optional/misc files with same mod name.
     """
     print(f"⏳ Waiting for mod name to change from: '{previous_name}'")
+    print(f"   (Will proceed after {timeout}s if no change detected)")
     start_time = time.time()
     
     while time.time() - start_time < timeout:
@@ -134,8 +139,8 @@ def wait_for_mod_name_change(previous_name, timeout=MOD_NAME_TIMEOUT):
         
         time.sleep(2)
     
-    print("⚠ Timeout waiting for mod name change")
-    return None
+    print(f"⚠ No name change after {timeout}s - proceeding anyway (likely optional/misc file)")
+    return previous_name
 
 
 def auto_retry_find_button(timeout=AUTO_RETRY_TIMEOUT):
@@ -161,22 +166,28 @@ def auto_retry_find_button(timeout=AUTO_RETRY_TIMEOUT):
     return None
 
 
-def prompt_user_on_no_button():
+def infinite_retry_find_button():
     """
-    Prompts user when button is not found after multiple retries.
-    Returns True to continue, False to quit.
+    Keeps scanning for the button indefinitely until found.
+    User can stop with Ctrl+C.
     """
-    print("\n" + "="*60)
-    print("❌ 'Download manually' button not found after multiple attempts.")
-    print("="*60)
-    print("\nOptions:")
-    print("  [ENTER] - Retry looking for the button")
-    print("  [q]     - Quit the script")
-    print()
+    print("\n🔄 Button not found. Scanning indefinitely... (Press Ctrl+C to stop)")
+    print("   Scanning", end="", flush=True)
+    attempt = 0
     
-    user_input = input("Your choice: ").strip().lower()
-    
-    return user_input != 'q'
+    while True:
+        location = find_download_button(max_attempts=1)
+        if location is not None:
+            print(" Found!")
+            return location
+        
+        attempt += 1
+        if attempt % 10 == 0:
+            print(f"\n   Still scanning ({attempt} attempts)", end="", flush=True)
+        else:
+            print(".", end="", flush=True)
+        
+        time.sleep(POLL_INTERVAL)
 
 
 def setup_mod_name_region():
@@ -238,15 +249,8 @@ def main():
                 button_location = auto_retry_find_button(timeout=AUTO_RETRY_TIMEOUT)
                 
                 if button_location is None:
-                    # Still not found after auto-retry timeout - prompt user
-                    should_continue = prompt_user_on_no_button()
-                    
-                    if not should_continue:
-                        print("\n👋 Exiting script. Goodbye!")
-                        break
-                    else:
-                        print("\n🔄 Retrying...\n")
-                        continue
+                    # Still not found - scan indefinitely until found
+                    button_location = infinite_retry_find_button()
         
         # Step 2: Click the button
         click_button(button_location)
@@ -260,15 +264,8 @@ def main():
         if not wait_for_button_reappear(timeout=30):
             print("⚠ Button didn't reappear. Continuing anyway...")
         
-        # Step 5: Wait for mod name to change before clicking again
-        new_mod_name = wait_for_mod_name_change(current_mod_name, timeout=MOD_NAME_TIMEOUT)
-        
-        if new_mod_name:
-            current_mod_name = new_mod_name
-        else:
-            print("⚠ Mod name didn't change. Proceeding anyway...")
-            # Update mod name even if we're not sure it changed
-            current_mod_name = capture_mod_name(MOD_NAME_REGION)
+        # Step 5: Wait for mod name to change before clicking again (or timeout after 5s)
+        current_mod_name = wait_for_mod_name_change(current_mod_name)
         
         print(f"✅ Downloads completed: {download_count}")
         print("-" * 60)
